@@ -7,11 +7,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Player extends Model
 {
+
+    public const STATUS_FREE_AGENT = 'free_agent';
+    public const STATUS_IN_TEAM    = 'in_team';
+    public const STATUS_INJURED    = 'injured';
+
+    protected $casts = [
+        'player_status' => 'string',
+    ];
     protected $fillable = [
         'name',
         'surname',
         'nickname',
         'rating',
+        'country',
+        ''
     ];
 
     public function images(): HasMany

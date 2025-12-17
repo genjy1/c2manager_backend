@@ -68,4 +68,9 @@ class PlayerController extends Controller
         ], 200);
     }
 
+    public function show(int $id) {
+        $player = Player::with('images')->findOrFail($id);
+
+        return response()->json(['data' => $player], 200);
+    }
 }
