@@ -2,78 +2,224 @@ version: "3.9"
 
 services:
   nginx:
-    image: nginx:latest
-    container_name: nginx
+    image: nginx:1.25-alpine
+    container_name: c2manager_nginx
+    restart: unless-stopped
     ports:
-      - "80:80"
+      - "${NGINX_PORT:-80}:80"
     volumes:
-      - ./:/var/www/html
+      - ./:/var/www/html:delegated
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - nginx_logs:/var/log/nginx
     depends_on:
-      - php
+      php:
+        condition: service_healthy
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
 
   php:
     build:
-      context: ./docker/php
-      dockerfile: Dockerfile
-    container_name: php
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+      target: development
+      args:
+        - BUILD_ENV=development
+    container_name: c2manager_php
+    restart: unless-stopped
     working_dir: /var/www/html
     volumes:
-      - ./:/var/www/html
+      - ./:/var/www/html:delegated
       - ./docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini:ro
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - DB_HOST=db
+      - DB_DATABASE=${DB_DATABASE:-laravel}
+      - DB_USERNAME=${DB_USERNAME:-laravel}
+      - DB_PASSWORD=${DB_PASSWORD:-laravel}
+      - REDIS_HOST=redis
+      - CACHE_STORE=redis
+      - SESSION_DRIVER=redis
+      - QUEUE_CONNECTION=redis
     expose:
       - "9000"
     networks:
       - app_network
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm -t || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
-  db:
-    image: mysql:8
-    container_name: db
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: laravel
-      MYSQL_DATABASE: laravel
-      MYSQL_USER: laravel
-      MYSQL_PASSWORD: laravel
+  queue:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+      target: development
+    container_name: c2manager_queue
+    restart: unless-stopped
+    working_dir: /var/www/html
     volumes:
-      - db_data:/var/lib/mysql
-    ports:
-      - "3306:3306"
+      - ./:/var/www/html:delegated
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - DB_HOST=db
+      - DB_DATABASE=${DB_DATABASE:-laravel}
+      - DB_USERNAME=${DB_USERNAME:-laravel}
+      - DB_PASSWORD=${DB_PASSWORD:-laravel}
+      - REDIS_HOST=redis
+      - QUEUE_CONNECTION=redis
+    command: php artisan queue:work --tries=3 --timeout=90 --sleep=3
     networks:
       - app_network
+    depends_on:
+      php:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  db:
+    image: mysql:8.0
+    container_name: c2manager_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-laravel}
+      MYSQL_DATABASE: ${DB_DATABASE:-laravel}
+      MYSQL_USER: ${DB_USERNAME:-laravel}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-laravel}
+      MYSQL_ROOT_HOST: "%"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    networks:
+      - app_network
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-laravel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   pma:
     image: phpmyadmin/phpmyadmin:latest
-    container_name: pma
+    container_name: c2manager_pma
+    restart: unless-stopped
     ports:
-      - "8080:80"
+      - "${PMA_PORT:-8080}:80"
     environment:
       PMA_HOST: db
-      MYSQL_ROOT_PASSWORD: laravel
+      PMA_PORT: 3306
+      PMA_USER: ${DB_USERNAME:-laravel}
+      PMA_PASSWORD: ${DB_PASSWORD:-laravel}
+      UPLOAD_LIMIT: 128M
     networks:
       - app_network
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - dev
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   redis:
-    image: redis:latest
-    container_name: redis
-    ports:
-      - "6379:6379"
+    image: redis:7-alpine
+    container_name: c2manager_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
 
   mailpit:
-    image: axllent/mailpit
-    container_name: mailpit
+    image: axllent/mailpit:latest
+    container_name: c2manager_mailpit
+    restart: unless-stopped
     ports:
-      - "8025:8025"
-      - "1025:1025"
+      - "${MAILPIT_WEB_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
     networks:
       - app_network
+    profiles:
+      - dev
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
 networks:
   app_network:
+    driver: bridge
 
 volumes:
   db_data:
+    driver: local
+  redis_data:
+    driver: local
+  nginx_logs:
+    driver: local
