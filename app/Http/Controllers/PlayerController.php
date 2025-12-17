@@ -21,9 +21,10 @@ class PlayerController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'surname' => 'required|string|max:255',
-            'nickname' => 'nullable|string|max:255',
+            'nickname' => 'nullable|string|max:255|unique:players,nickname',
             'rating' => 'required|numeric|min:0',
             'avatar' => 'nullable|string', // base64
+            'mime_type' => 'required_with:avatar|string',
         ]);
 
         $player = Player::create([
@@ -33,11 +34,11 @@ class PlayerController extends Controller
             'rating' => $request->rating,
         ]);
 
-        if (!empty($request->input('avatar')) && $request->input('avatar') != null) {
+        if ($request->filled('avatar')) {
             PlayerImage::create([
                 'player_id' => $player->id,
                 'base64' => $request->avatar,
-                'mime' => $request->mime,
+                'mime_type' => $request->mime_type,
             ]);
         }
 

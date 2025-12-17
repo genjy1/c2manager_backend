@@ -7,12 +7,11 @@ use App\Http\Controllers\AuthController;
 
 Route::post('login', [AuthController::class, 'login']);
 Route::post('register', [AuthController::class, 'register']);
-Route::post('logout', [AuthController::class, 'logout']);
+Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
 
 Route::prefix('players')->group(function () {
    Route::get('get', [PlayerController::class, 'index']);
-   Route::get('crawl', [PlayerController::class, 'crawl_players']);
 });
 
 Route::prefix('player')->group(function () {
