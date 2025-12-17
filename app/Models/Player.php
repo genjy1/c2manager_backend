@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Player extends Model
@@ -21,7 +22,7 @@ class Player extends Model
         'nickname',
         'rating',
         'country',
-        ''
+        'player_status',
     ];
 
     public function images(): HasMany
@@ -32,6 +33,25 @@ class Player extends Model
     public function mainImage(): ?PlayerImage
     {
         return $this->images()->latest()->first();
+    }
+
+    /**
+     * Get the teams that the player belongs to.
+     */
+    public function teams(): BelongsToMany
+    {
+        return $this->belongsToMany(Team::class, 'player_team')
+            ->withPivot(['position', 'joined_at', 'left_at', 'is_captain'])
+            ->withTimestamps()
+            ->orderByPivot('joined_at', 'desc');
+    }
+
+    /**
+     * Get the active teams (player hasn't left).
+     */
+    public function activeTeams(): BelongsToMany
+    {
+        return $this->teams()->whereNull('player_team.left_at');
     }
 
     // Accessor для быстрого использования в <img>
