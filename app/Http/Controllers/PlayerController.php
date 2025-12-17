@@ -2,70 +2,118 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StorePlayerRequest;
 use App\Models\Player;
 use App\Models\PlayerImage;
-use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PlayerController extends Controller
 {
-    // Получение списка игроков
-    public function index()
+    /**
+     * Display a listing of players.
+     */
+    public function index(): JsonResponse
     {
-        $players = Player::with('images')->get();
-        return response()->json(['data' => $players], 200);
-    }
+        try {
+            $players = Player::with('images')->get();
 
-    // Создание нового игрока с аватаром
-    public function store(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'surname' => 'required|string|max:255',
-            'nickname' => 'nullable|string|max:255|unique:players,nickname',
-            'rating' => 'required|numeric|min:0',
-            'avatar' => 'nullable|string', // base64
-            'mime_type' => 'required_with:avatar|string',
-        ]);
-
-        $player = Player::create([
-            'name' => $request->name,
-            'surname' => $request->surname,
-            'nickname' => $request->nickname,
-            'rating' => $request->rating,
-        ]);
-
-        if ($request->filled('avatar')) {
-            PlayerImage::create([
-                'player_id' => $player->id,
-                'base64' => $request->avatar,
-                'mime_type' => $request->mime_type,
-            ]);
-        }
-
-
-
-        return response()->json([
-            'success' => true,
-            'player' => $player->load('images')
-        ]);
-    }
-
-    public function destroy(int $id)
-    {
-        $player = Player::find($id);
-
-        if (!$player) {
             return response()->json([
+                'success' => true,
+                'data' => $players
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Failed to retrieve players', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve players'
+            ], 500);
+        }
+    }
+
+    /**
+     * Store a newly created player with optional avatar.
+     */
+    public function store(StorePlayerRequest $request): JsonResponse
+    {
+        try {
+            $player = DB::transaction(function () use ($request) {
+                // Create player
+                $player = Player::create([
+                    'name' => $request->input('name'),
+                    'surname' => $request->input('surname'),
+                    'nickname' => $request->input('nickname'),
+                    'rating' => $request->input('rating'),
+                ]);
+
+                // Create player image if avatar is provided
+                if ($request->filled('avatar')) {
+                    PlayerImage::create([
+                        'player_id' => $player->id,
+                        'base64' => $request->input('avatar'),
+                        'mime_type' => $request->input('mime_type'),
+                    ]);
+                }
+
+                return $player;
+            });
+
+            // Reload with relationships
+            $player->load('images');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Player created successfully',
+                'data' => $player
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Failed to create player', [
+                'error' => $e->getMessage(),
+                'request_data' => $request->except(['avatar']) // Don't log base64
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create player'
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove the specified player from storage.
+     */
+    public function destroy(int $id): JsonResponse
+    {
+        try {
+            $player = Player::findOrFail($id);
+
+            DB::transaction(function () use ($player) {
+                // Images will be deleted automatically due to cascade delete
+                $player->delete();
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Player deleted successfully'
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
                 'message' => 'Player not found'
             ], 404);
+        } catch (\Exception $e) {
+            Log::error('Failed to delete player', [
+                'player_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete player'
+            ], 500);
         }
-
-        $player->delete();
-
-        return response()->json([
-            'success' => true,
-            'data' => Player::with('images')->get()
-        ], 200);
     }
 
     public function show(int $id) {
