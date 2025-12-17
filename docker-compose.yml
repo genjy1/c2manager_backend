@@ -46,7 +46,7 @@ services:
       - APP_ENV=${APP_ENV:-local}
       - DB_HOST=db
       - DB_DATABASE=${DB_DATABASE:-laravel}
-      - DB_USERNAME=${DB_USERNAME:-laravel}
+      - DB_USERNAME=${DB_USERNAME:-root}
       - DB_PASSWORD=${DB_PASSWORD:-laravel}
       - REDIS_HOST=redis
       - CACHE_STORE=redis
@@ -90,7 +90,7 @@ services:
       - APP_ENV=${APP_ENV:-local}
       - DB_HOST=db
       - DB_DATABASE=${DB_DATABASE:-laravel}
-      - DB_USERNAME=${DB_USERNAME:-laravel}
+      - DB_USERNAME=${DB_USERNAME:-root}
       - DB_PASSWORD=${DB_PASSWORD:-laravel}
       - REDIS_HOST=redis
       - QUEUE_CONNECTION=redis
@@ -116,8 +116,6 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-laravel}
       MYSQL_DATABASE: ${DB_DATABASE:-laravel}
-      MYSQL_USER: ${DB_USERNAME:-laravel}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-laravel}
       MYSQL_ROOT_HOST: "%"
     volumes:
       - db_data:/var/lib/mysql
