@@ -10,6 +10,9 @@ class PlayerImage extends Model
     protected $fillable = [
         'player_id',
         'base64',
+        'mime_type',
+        'filename',
+        'size',
     ];
 
     public function player(): BelongsTo
@@ -20,8 +23,8 @@ class PlayerImage extends Model
     // Accessor для вставки в <img>
     public function getImageDataUriAttribute(): ?string
     {
-        return $this->image && $this->mime
-            ? "data:{$this->mime};base64,{$this->image}"
+        return $this->base64 && $this->mime_type
+            ? "data:{$this->mime_type};base64,{$this->base64}"
             : null;
     }
 
@@ -30,7 +33,7 @@ class PlayerImage extends Model
     {
         if (!$file) return;
 
-        $this->mime = $file->getMimeType();
-        $this->image = base64_encode(file_get_contents($file->getRealPath()));
+        $this->mime_type = $file->getMimeType();
+        $this->base64 = base64_encode(file_get_contents($file->getRealPath()));
     }
 }
