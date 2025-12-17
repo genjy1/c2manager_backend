@@ -58,7 +58,7 @@ WORKDIR /var/www/html
 FROM base AS development
 
 # php.ini для development
-COPY php.ini /usr/local/etc/php/conf.d/custom.ini
+COPY docker/php/php.ini /usr/local/etc/php/conf.d/custom.ini
 
 # Создание пользователя для Laravel
 RUN addgroup -g 1000 laravel && \
